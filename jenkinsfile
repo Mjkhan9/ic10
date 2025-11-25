@@ -1,0 +1,137 @@
+Install Jenkins Master
+
+sudo apt update
+sudo apt install fontconfig openjdk-21-jre
+java -version
+sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" https://pkg.jenkins.io/debian-stable binary/ | sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+sudo apt update
+sudo apt install jenkins
+systemctl status jenkins
+
+-------------------------------------------
+Jenkins Admin Password
+
+sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+
+-------------------------------------------
+Install Jenkins Agent
+
+sudo apt update
+sudo apt install -y openjdk-17-jre
+mkdir /home/ubuntu/jenkins-agent
+
+-------------------------------------------
+
+Configure Jenkins Agent to Auto Start as Service
+
+sudo vi /etc/systemd/system/jenkins-agent.service
+
+[Unit]
+Description=Jenkins Agent
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/java -jar /home/ubuntu/jenkins-agent/agent.jar \
+  -url http://98.93.45.40:8080/ \
+  -secret ff435d5a17f6c0f62fd2f9b45a1ffa344f795ae46b9bc30961af13d0f2074c96 \
+  -name DevServer \
+  -webSocket \
+  -workDir "/home/ubuntu/jenkins-agent"
+User=ubuntu
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+-------------------------------------------
+
+Start Service 
+
+sudo systemctl daemon-reload
+sudo systemctl enable jenkins-agent
+sudo systemctl start jenkins-agent
+systemctl status jenkins-agent
+
+
+-------------------------------------------
+Jenkins Pipeline Code
+
+pipeline {
+    agent { label 'DevServer' }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/kruthiksai/IC9.git',
+                    branch: 'master',
+                    credentialsId: 'github-token'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    sudo apt update
+                    sudo apt install -y python3-flask python3-flask-cors
+                '''
+            }
+        }
+
+        stage('Run Flask App') {
+            steps {
+                sh '''
+                    cd $WORKSPACE
+                    sudo pkill -f app.py || echo "No running Flask app"
+                    sudo nohup python3 app.py > flask.log 2>&1 &
+                '''
+            }
+        }
+    }
+}
+
+-------------------------------------------
+Python Code
+
+from flask import Flask, jsonify
+from flask_cors import CORS
+
+
+app = Flask(__name__)
+CORS(app)
+
+
+# Sample data
+chocolates = [
+    {
+        "name": "Dark Chocolate",
+        "image": "https://m.media-amazon.com/images/I/81EAqP0D0+L.jpg",
+        "price": 6.55
+    },
+    {
+        "name": "Milk Chocolate",
+        "image": "https://m.media-amazon.com/images/I/81Rz8SxtiJL.jpg",
+        "price": 4.99
+    },
+    {
+        "name": "White Chocolate",
+        "image": "https://m.media-amazon.com/images/I/61-pg5u+9pL.jpg",
+        "price": 6.49
+    }
+]
+
+@app.route('/chocolates', methods=['GET'])
+def get_chocolates():
+    return jsonify(chocolates)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=80)
+
+
+
+
+
+
+
+
